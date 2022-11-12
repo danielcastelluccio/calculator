@@ -1,3 +1,4 @@
+from os import read
 import sys
 
 def is_math_symbol(character):
@@ -315,45 +316,10 @@ def apply_math_operation(operation, first, second):
         case "^":
             return first ** second
 
-rules = """
-derivative Aa+Bb => derivative[Aa]+derivative[Bb]
-derivative Aa-Bb => derivative[Aa]-derivative[Bb]
-derivative (Aa..) => (derivative[Aa..])
-derivative A*(b^C) => (A*C)*(b^(C-1))
-derivative a^BB => BB*(a^(BB-1))
-derivative A*b => A
-derivative b => 1
-derivative A => 0
-derivative Aa*Bb => (Aa*derivative[Bb])+(Bb*derivative[Aa])
-derivative Aa/Bb => ((Bb*derivative[Aa])-(Aa*derivative[Bb]))/(Bb^2)
-derivative A^b => (A^b)*(derivative[b]*log_e(A))
-derivative log_A[Bb..] => (1/Bb..)*((derivative[Bb..])*(1/log_e[A]))
-
-antiderivative a => (1/2)*(a^2)
-antiderivative A*(b^C) => ((1/(C+1))*(A))*(b^(C+1))
-
-simplify A => A
-simplify A*b => A*b
-simplify Aa+0 => Aa
-simplify 0*Aa => 0
-simplify A+B => evaluate{A+B}
-simplify A-B => evaluate{A-B}
-simplify A*B => evaluate{A*B}
-simplify AA-BB => simplify[AA]-simplify[BB]
-simplify (Aa) => Aa
-simplify a^0 => 1
-simplify a^1 => a
-simplify a^Bb => a^simplify[Bb]
-simplify Aa*0 => 0
-simplify Aa+Bb => simplify[Aa]+simplify[Bb]
-simplify Aa*Bb => simplify[Aa]*simplify[Bb]
-simplify (Aa..) => (simplify[Aa..])
-simplify Aa => Aa
-"""
-
 if __name__ == "__main__":
-    rules = parse_rules(rules)
-    expression = " ".join(sys.argv[1:])
+    rules_file = sys.argv[1]
+    rules = parse_rules(open(rules_file).read())
+    expression = " ".join(sys.argv[2:])
     tokens = tokenize(expression)
 
     applied, tokens = apply(tokens, rules, None)
