@@ -8,17 +8,17 @@ Rules are provided in a file passed in through the command line.
 
 ## Example Usage:
 ```
-python calculator.py rules.rule derivative[x^2]
+python calculator.py rules.rule 'derivative[x^2]'
 // Output: 2*(x^(2-1))
 ```
 In this case the output expression is not simplified whatsoever, so usually I would apply the 'simplify' rule after taking a derivative.
 ```
-python calculator.py rules.rules simplify[derivative[x^2]]
+python calculator.py rules.rules 'simplify[derivative[x^2]]'
 // Output: 2*(x^(1))
 ```
 The output has been partially simplified, however there are still many more simplifications to do. These can be done by calling simplify again on the result. This would get quite repetitive so we have a special syntax for running a transformation multiple times!
 ```
-python calculator.py rules.rule simplify^4[derivative[x^2]]
+python calculator.py rules.rule 'simplify^4[derivative[x^2]]'
 // Output: 2*x
 ```
 Now the output is finally completely simplified!
