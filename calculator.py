@@ -17,7 +17,9 @@ def is_symbol(character):
         or character == '(' \
         or character == ')' \
         or character == '[' \
-        or character == ']'
+        or character == ']' \
+        or character == '{' \
+        or character == '}' 
 
 def tokenize(expression):
     expression = expression + " "
@@ -67,7 +69,7 @@ def get_binding(expression, index, continues):
     if continues:
         multiple_tokens = []
         inside_parenthesis = 1
-        while inside_parenthesis > 0:
+        while inside_parenthesis > 0 and index < len(expression):
             if expression[index] == "(" or expression[index] == "[":
                 inside_parenthesis += 1
             elif expression[index] == ")" or expression[index] == "]":
@@ -77,7 +79,7 @@ def get_binding(expression, index, continues):
 
             index += 1
 
-        return multiple_tokens[0:-1], index - 1
+        return multiple_tokens[0:-1 if inside_parenthesis == 0 else len(multiple_tokens)], index - (1 if inside_parenthesis == 0 else 0)
     elif expression[index] == '(':
         binding = ["("]
         inside_parenthesis = 1
@@ -138,11 +140,67 @@ def is_str_int(string):
 def is_str_number(string):
     return is_str_int(string) or string == "e"
 
+def apply_internals(expression):
+    if expression[0] == "evaluate":
+        first = int(expression[2])
+        second = int(expression[4])
+        operation = expression[3]
+        return [str(apply_math_operation(operation, first, second))]
+
+    return expression
+
 def apply(expression, rules, command_in):
     command = expression[0]
-    valid = False
+    valid = True
     if command in rules:
-        valid, expression = apply(expression[2:-1], rules, command)
+        #expression_start = 2
+        #count = 1
+        #if expression[1] == "^":
+        #    count = int(expression[2])
+        #    expression_start = 4
+
+        #valid, expression = apply(expression[2:-1], rules, command)
+
+        expression_new = []
+        index = 0
+        while index < len(expression):
+            if expression[index] in rules:
+                command = expression[index]
+
+                count = 1
+                if expression[index + 1] == "^":
+                    count = int(expression[index + 2])
+                    index += 2
+
+                temp_expression = []
+                index += 2
+                inside_parenthesis = 1
+                while inside_parenthesis > 0:
+                    if expression[index] == "[":
+                        inside_parenthesis += 1
+                    elif expression[index] == "]":
+                        inside_parenthesis -= 1
+
+                    temp_expression.append(expression[index])
+
+                    index += 1
+                
+                temp_expression = temp_expression[0:-1]
+
+                i = 0
+                while i < count and valid:
+                    valid, temp_expression = apply(temp_expression, rules, command)
+
+                    if temp_expression:
+                        temp_expression = apply_internals(temp_expression)
+                    i += 1
+
+                expression_new.extend(temp_expression)
+            else:
+                expression_new.append(expression[index])
+                index += 1
+
+        expression = expression_new
 
     if command_in and command_in in rules:
         return apply_rule(expression, rules, command_in)
@@ -175,6 +233,12 @@ def apply_rule(expression, rules, rule_type):
                 else:
                     rule_invalid = True
                     break
+            elif is_str_number(input):
+                if expression[expression_index] == input:
+                    expression_index += 1
+                else:
+                    rule_invalid = True
+                    break
             else:
                 binding, expression_index = get_binding(expression, expression_index, input.endswith(".."))
                 is_constant = True
@@ -183,6 +247,9 @@ def apply_rule(expression, rules, rule_type):
                         is_constant = False
 
                 if input.isupper() and not is_constant:
+                    rule_invalid = True
+                    break
+                elif input.isupper() and len(input) == 1 and not len(binding) == 1:
                     rule_invalid = True
                     break
                 elif input.islower() and not (len(binding) == 1 and not is_str_number(binding[0])):
@@ -203,6 +270,12 @@ def apply_rule(expression, rules, rule_type):
 
                     cached_expression.append(applied_bindings[index])
                     cached_expression.append(applied_bindings[index + 1])
+
+                    if applied_bindings[index + 1] == "^":
+                        cached_expression.append(applied_bindings[index + 2])
+                        cached_expression.append(applied_bindings[index + 3])
+                        index += 2
+
                     index += 2
 
                     inside_parenthesis = 1
@@ -229,98 +302,6 @@ def apply_rule(expression, rules, rule_type):
 
     return False, None
 
-rules = """
-derivative Aa+Bb => derivative[Aa]+derivative[Bb]
-derivative Aa-Bb => derivative[Aa]-derivative[Bb]
-derivative (Aa..) => (derivative[Aa..])
-derivative A*b^C => (A*C)*b^(C-1)
-derivative a^B => B*a^(B-1)
-derivative A*b => A
-derivative b => 1
-derivative A => 0
-derivative Aa*Bb => (Aa*derivative[Bb])+(Bb*derivative[Aa])
-derivative Aa/Bb => ((Bb*derivative[Aa])-(Aa*derivative[Bb]))/Bb^2
-derivative A^b => A^b*(derivative[b]*log_e(A))
-derivative log_A[Bb..] => (1/Bb..)*((derivative[Bb..])*(1/log_e[A]))
-
-antiderivative a => (1/2)*a^2
-antiderivative A*b^C => ((1/(C+1))*(A))*b^(C+1)
-"""
-
-def simplify(tokens):
-    done_anything = True
-    while done_anything:
-        tokens, _, done_anything = simplify_inner(tokens, 0)
-
-    is_all_parenthesis = False
-    if tokens[0] == "(":
-        is_all_parenthesis = True
-
-        inside_parenthesis = 1
-        for token in tokens[1:]:
-            if inside_parenthesis == 0:
-                is_all_parenthesis = False
-
-            if token == "(":
-                inside_parenthesis += 1
-            elif token == ")":
-                inside_parenthesis -= 1
-    if is_all_parenthesis:
-        tokens = tokens[1:-1]
-
-    return tokens
-
-def simplify_inner(tokens, index):
-    tokens_new = []
-    done_anything = False
-
-    while index < len(tokens):
-        if tokens[index] == "(":
-            simplified, index, done_anything_temp = simplify_inner(tokens, index + 1)
-
-            if len(simplified) == 1:
-                tokens_new.append(simplified[0])
-            else:
-                if done_anything_temp:
-                    done_anything = True
-
-                has_extra_parenthesis = False
-
-                if simplified[0] == "(":
-                    has_extra_parenthesis = True
-
-                    inside_parenthesis = 1
-                    for token in simplified[1:]:
-                        if inside_parenthesis == 0:
-                            has_extra_parenthesis = False
-
-                        if token == "(":
-                            inside_parenthesis += 1
-                        elif token == ")":
-                            inside_parenthesis -= 1
-
-                if not has_extra_parenthesis:
-                    tokens_new.append("(")
-                tokens_new.extend(simplified)
-                if not has_extra_parenthesis:
-                    tokens_new.append(")")
-
-            index += 1
-
-        elif tokens[index] == ")":
-            break
-        else:
-            tokens_new.append(tokens[index])
-            index += 1
-
-    tokens_new, done_anything_temp = simplify_mathematics(tokens_new)
-    if done_anything_temp:
-        done_anything = True
-
-    #print(tokens_new)
-
-    return tokens_new, index, done_anything
-
 def apply_math_operation(operation, first, second):
     match operation:
         case "+":
@@ -334,82 +315,50 @@ def apply_math_operation(operation, first, second):
         case "^":
             return first ** second
 
-def simplify_mathematics(tokens_new):
-    done_anything = False
+rules = """
+derivative Aa+Bb => derivative[Aa]+derivative[Bb]
+derivative Aa-Bb => derivative[Aa]-derivative[Bb]
+derivative (Aa..) => (derivative[Aa..])
+derivative A*(b^C) => (A*C)*(b^(C-1))
+derivative a^BB => BB*(a^(BB-1))
+derivative A*b => A
+derivative b => 1
+derivative A => 0
+derivative Aa*Bb => (Aa*derivative[Bb])+(Bb*derivative[Aa])
+derivative Aa/Bb => ((Bb*derivative[Aa])-(Aa*derivative[Bb]))/(Bb^2)
+derivative A^b => (A^b)*(derivative[b]*log_e(A))
+derivative log_A[Bb..] => (1/Bb..)*((derivative[Bb..])*(1/log_e[A]))
 
-    if len(tokens_new) == 3 and is_str_int(tokens_new[0]) and is_math_symbol(tokens_new[1]) and is_str_int(tokens_new[2]):
-        first_number = int(tokens_new[0])
-        second_number = int(tokens_new[2])
-        symbol = tokens_new[1]
-        done_anything = True
-        tokens_new = [str(apply_math_operation(symbol, first_number, second_number))]
-    else:
-        removal_patterns = [("*", "1"), ("^", "1")]
+antiderivative a => (1/2)*(a^2)
+antiderivative A*(b^C) => ((1/(C+1))*(A))*(b^(C+1))
 
-        index_temp = 0
-        while index_temp < len(tokens_new) - 1:
-            to_continue = False
-            for pattern in removal_patterns:
-                if tokens_new[index_temp] == pattern[0] and tokens_new[index_temp + 1] == pattern[1]:
-                    done_anything = True
-                    del tokens_new[index_temp]
-                    del tokens_new[index_temp]
-                    to_continue = True
-                    break
-
-            if not to_continue:
-                index_temp += 1
-
-    if not done_anything:
-        if len(tokens_new) > 2 and tokens_new[-1] == "0" and tokens_new[-2] == "*":
-            tokens_new = ["0"]
-            done_anything = True
-        elif len(tokens_new) > 2 and tokens_new[0] == "0" and tokens_new[1] == "*":
-            tokens_new = ["0"]
-            done_anything = True
-        elif len(tokens_new) > 4 and is_str_int(tokens_new[0]) and (tokens_new[1] == "*" or tokens_new[1] == "+") and tokens_new[2] == "(" and is_str_int(tokens_new[3]):
-            first_number = int(tokens_new[0])
-            second_number = int(tokens_new[3])
-            operation = tokens_new[1]
-            tokens_new = [str(apply_math_operation(operation, first_number, second_number))] + tokens_new[4:-1]
-            done_anything = True
-
-    if not done_anything:
-        index_temp = 0
-        while index_temp < len(tokens_new) - 6:
-            if tokens_new[index_temp] == "log" and tokens_new[index_temp + 1] == "_" and tokens_new[index_temp + 3] == "[" and tokens_new[index_temp + 5] == "]" and tokens_new[index_temp + 2] == tokens_new[index_temp + 4]: 
-                del tokens_new[index_temp]
-                del tokens_new[index_temp]
-                del tokens_new[index_temp]
-                del tokens_new[index_temp]
-                del tokens_new[index_temp]
-                del tokens_new[index_temp]
-                tokens_new.insert(index_temp, "1")
-                done_anything = True
-            else:
-                index_temp += 1
-
-    return tokens_new, done_anything
+simplify A => A
+simplify A*b => A*b
+simplify Aa+0 => Aa
+simplify 0*Aa => 0
+simplify A+B => evaluate{A+B}
+simplify A-B => evaluate{A-B}
+simplify A*B => evaluate{A*B}
+simplify AA-BB => simplify[AA]-simplify[BB]
+simplify (Aa) => Aa
+simplify a^0 => 1
+simplify a^1 => a
+simplify a^Bb => a^simplify[Bb]
+simplify Aa*0 => 0
+simplify Aa+Bb => simplify[Aa]+simplify[Bb]
+simplify Aa*Bb => simplify[Aa]*simplify[Bb]
+simplify (Aa..) => (simplify[Aa..])
+simplify Aa => Aa
+"""
 
 if __name__ == "__main__":
-    command = sys.argv[1]
-    if command == "transform":
-        rules = parse_rules(rules)
-        expression = " ".join(sys.argv[2:])
-        tokens = tokenize(expression)
+    rules = parse_rules(rules)
+    expression = " ".join(sys.argv[1:])
+    tokens = tokenize(expression)
 
-        applied, tokens = apply(tokens, rules, None)
+    applied, tokens = apply(tokens, rules, None)
 
-        if applied and tokens:
-            print("".join(tokens))
-        else:
-            print("Could not make transformation")
-    elif command == "simplify":
-        if len(sys.argv) > 2:
-            expression = " ".join(sys.argv[2:])
-        else:
-            expression = sys.stdin.readline()[0:-1]
-
-        tokens = tokenize(expression)
-        tokens = simplify(tokens)
+    if applied and tokens:
         print("".join(tokens))
+    else:
+        print("Could not make transformation")
