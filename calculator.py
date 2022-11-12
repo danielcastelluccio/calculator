@@ -61,6 +61,8 @@ def parse_rules(rules):
 
     return rules_out
 
+mathematical_functions = ["log"]
+
 def get_binding(expression, index, continues):
     if continues:
         multiple_tokens = []
@@ -91,6 +93,27 @@ def get_binding(expression, index, continues):
             index += 1
 
         return binding, index
+    elif expression[index] in mathematical_functions:
+        binding = []
+        while not expression[index] == "[":
+            binding.append(expression[index])
+            index += 1
+
+        binding.append("[")
+        index += 1
+
+        inside_parenthesis = 1
+        while inside_parenthesis > 0:
+            binding.append(expression[index])
+
+            if expression[index] == "[":
+                inside_parenthesis += 1
+            elif expression[index] == "]":
+                inside_parenthesis -= 1
+
+            index += 1
+
+        return binding, index
     else:
         return [expression[index]], index + 1
 
@@ -111,6 +134,9 @@ def is_str_int(string):
         return True
     except ValueError:
         return False
+
+def is_str_number(string):
+    return is_str_int(string) or string == "e"
 
 def apply(expression, rules, command_in):
     command = expression[0]
@@ -143,17 +169,23 @@ def apply_rule(expression, rules, rule_type):
                 else:
                     rule_invalid = True
                     break
+            elif input in mathematical_functions:
+                if expression[expression_index] == input:
+                    expression_index += 1
+                else:
+                    rule_invalid = True
+                    break
             else:
                 binding, expression_index = get_binding(expression, expression_index, input.endswith(".."))
                 is_constant = True
                 for token in binding:
-                    if not is_str_int(token) or not token == "(" or not token == ")" or not is_symbol(token):
+                    if not is_str_number(token) and not token == "(" and not token == ")" and not is_symbol(token):
                         is_constant = False
 
-                if input.isupper() and is_constant:
+                if input.isupper() and not is_constant:
                     rule_invalid = True
                     break
-                elif input.islower() and not (len(binding) == 1 and not is_str_int(binding[0])):
+                elif input.islower() and not (len(binding) == 1 and not is_str_number(binding[0])):
                     rule_invalid = True
                     break
 
@@ -175,9 +207,9 @@ def apply_rule(expression, rules, rule_type):
 
                     inside_parenthesis = 1
                     while inside_parenthesis > 0:
-                        if applied_bindings[index] == "(":
+                        if applied_bindings[index] == "[":
                             inside_parenthesis += 1
-                        elif applied_bindings[index] == ")":
+                        elif applied_bindings[index] == "]":
                             inside_parenthesis -= 1
 
                         cached_expression.append(applied_bindings[index])
@@ -198,18 +230,18 @@ def apply_rule(expression, rules, rule_type):
     return False, None
 
 rules = """
-derivative Aa+Bb => derivative(Aa)+derivative(Bb)
-derivative Aa-Bb => derivative(Aa)-derivative(Bb)
-derivative (Aa..) => (derivative(Aa..))
+derivative Aa+Bb => derivative[Aa]+derivative[Bb]
+derivative Aa-Bb => derivative[Aa]-derivative[Bb]
+derivative (Aa..) => (derivative[Aa..])
 derivative A*b^C => (A*C)*b^(C-1)
 derivative a^B => B*a^(B-1)
 derivative A*b => A
 derivative b => 1
 derivative A => 0
-derivative Aa*Bb => Aa*derivative(Bb)+Bb*derivative(Aa)
-derivative Aa/Bb => (Bb*derivative(Aa)-Aa*derivative(Bb))/Bb^2
-derivative A^b => A^b*(derivative(b)*ln(A))
-derivative log_A[Bb..] => log_A[Bb..]*((derivative(Bb..))*(1/ln[A]))
+derivative Aa*Bb => (Aa*derivative[Bb])+(Bb*derivative[Aa])
+derivative Aa/Bb => ((Bb*derivative[Aa])-(Aa*derivative[Bb]))/Bb^2
+derivative A^b => A^b*(derivative[b]*log_e(A))
+derivative log_A[Bb..] => (1/Bb..)*((derivative[Bb..])*(1/log_e[A]))
 
 antiderivative a => (1/2)*a^2
 antiderivative A*b^C => ((1/(C+1))*(A))*b^(C+1)
@@ -219,6 +251,22 @@ def simplify(tokens):
     done_anything = True
     while done_anything:
         tokens, _, done_anything = simplify_inner(tokens, 0)
+
+    is_all_parenthesis = False
+    if tokens[0] == "(":
+        is_all_parenthesis = True
+
+        inside_parenthesis = 1
+        for token in tokens[1:]:
+            if inside_parenthesis == 0:
+                is_all_parenthesis = False
+
+            if token == "(":
+                inside_parenthesis += 1
+            elif token == ")":
+                inside_parenthesis -= 1
+    if is_all_parenthesis:
+        tokens = tokens[1:-1]
 
     return tokens
 
@@ -269,7 +317,22 @@ def simplify_inner(tokens, index):
     if done_anything_temp:
         done_anything = True
 
+    #print(tokens_new)
+
     return tokens_new, index, done_anything
+
+def apply_math_operation(operation, first, second):
+    match operation:
+        case "+":
+            return first + second
+        case "-":
+            return first - second
+        case "*":
+            return first * second
+        case "/":
+            return int(first / second)
+        case "^":
+            return first ** second
 
 def simplify_mathematics(tokens_new):
     done_anything = False
@@ -279,29 +342,52 @@ def simplify_mathematics(tokens_new):
         second_number = int(tokens_new[2])
         symbol = tokens_new[1]
         done_anything = True
-        match symbol:
-            case "+":
-                tokens_new = [str(first_number + second_number)]
-            case "-":
-                tokens_new = [str(first_number - second_number)]
-            case "*":
-                tokens_new = [str(first_number * second_number)]
-            case "/":
-                tokens_new = [str(int(first_number / second_number))]
-            case "^":
-                tokens_new = [str(first_number ** second_number)]
+        tokens_new = [str(apply_math_operation(symbol, first_number, second_number))]
     else:
         removal_patterns = [("*", "1"), ("^", "1")]
 
         index_temp = 0
         while index_temp < len(tokens_new) - 1:
+            to_continue = False
             for pattern in removal_patterns:
                 if tokens_new[index_temp] == pattern[0] and tokens_new[index_temp + 1] == pattern[1]:
                     done_anything = True
                     del tokens_new[index_temp]
                     del tokens_new[index_temp]
-                else:
-                    index_temp += 1
+                    to_continue = True
+                    break
+
+            if not to_continue:
+                index_temp += 1
+
+    if not done_anything:
+        if len(tokens_new) > 2 and tokens_new[-1] == "0" and tokens_new[-2] == "*":
+            tokens_new = ["0"]
+            done_anything = True
+        elif len(tokens_new) > 2 and tokens_new[0] == "0" and tokens_new[1] == "*":
+            tokens_new = ["0"]
+            done_anything = True
+        elif len(tokens_new) > 4 and is_str_int(tokens_new[0]) and (tokens_new[1] == "*" or tokens_new[1] == "+") and tokens_new[2] == "(" and is_str_int(tokens_new[3]):
+            first_number = int(tokens_new[0])
+            second_number = int(tokens_new[3])
+            operation = tokens_new[1]
+            tokens_new = [str(apply_math_operation(operation, first_number, second_number))] + tokens_new[4:-1]
+            done_anything = True
+
+    if not done_anything:
+        index_temp = 0
+        while index_temp < len(tokens_new) - 6:
+            if tokens_new[index_temp] == "log" and tokens_new[index_temp + 1] == "_" and tokens_new[index_temp + 3] == "[" and tokens_new[index_temp + 5] == "]" and tokens_new[index_temp + 2] == tokens_new[index_temp + 4]: 
+                del tokens_new[index_temp]
+                del tokens_new[index_temp]
+                del tokens_new[index_temp]
+                del tokens_new[index_temp]
+                del tokens_new[index_temp]
+                del tokens_new[index_temp]
+                tokens_new.insert(index_temp, "1")
+                done_anything = True
+            else:
+                index_temp += 1
 
     return tokens_new, done_anything
 
