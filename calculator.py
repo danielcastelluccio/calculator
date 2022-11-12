@@ -1,4 +1,3 @@
-from os import read
 import sys
 
 def is_math_symbol(character):
@@ -142,26 +141,25 @@ def is_str_number(string):
     return is_str_int(string) or string == "e"
 
 def apply_internals(expression):
-    if expression[0] == "evaluate":
-        first = int(expression[2])
-        second = int(expression[4])
-        operation = expression[3]
-        return [str(apply_math_operation(operation, first, second))]
+    new_expression = []
+    index = 0
+    while index < len(expression):
+        if expression[index] == "evaluate":
+            first = int(expression[2])
+            second = int(expression[4])
+            operation = expression[3]
+            new_expression.append(str(apply_math_operation(operation, first, second)))
+            index += 6
+        else:
+            new_expression.append(expression[index])
+            index += 1
 
-    return expression
+    return new_expression
 
 def apply(expression, rules, command_in):
     command = expression[0]
     valid = True
     if command in rules:
-        #expression_start = 2
-        #count = 1
-        #if expression[1] == "^":
-        #    count = int(expression[2])
-        #    expression_start = 4
-
-        #valid, expression = apply(expression[2:-1], rules, command)
-
         expression_new = []
         index = 0
         while index < len(expression):
