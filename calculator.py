@@ -309,7 +309,7 @@ def apply_rule(expression, rules, rule_type):
                     if binding[0][0] == '-':
                         type = RuleType.INVALID
                     else:
-                        if is_str_number(binding[0]):
+                        if is_str_number(binding[0]) or binding[0] == "e":
                             type = RuleType.INDIVIDUAL_CONSTANT
                         else:
                             type = RuleType.INDIVIDUAL_VARIABLE
@@ -340,6 +340,10 @@ def apply_rule(expression, rules, rule_type):
                     rule_invalid = True
                     break
 
+                if input in bindings and not bindings[input] == binding:
+                    rule_invalid = True
+                    break
+                    
                 bindings[input] = binding
 
         if not rule_invalid and expression_index == len(expression):
