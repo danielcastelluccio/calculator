@@ -20,12 +20,9 @@ antiderivative a => (1/2)*(a^2)
 antiderivative A*(b^C) => ((1/(C+1))*(A))*(b^(C+1))
 
 
-simplifyinner 0+Aa => Aa
 simplifyinner Aa+0 => Aa
-simplifyinner 0*Aa => 0
 simplifyinner Aa*0 => 0
 simplifyinner Aa*1 => Aa
-simplifyinner 1*Aa => Aa
 simplifyinner a^0 => 1
 simplifyinner a^1 => a
 simplifyinner Aa/1 => Aa
@@ -41,8 +38,6 @@ simplifyinner A-B => evaluate{A-B}
 simplifyinner A*B => evaluate{A*B}
 simplifyinner A/B => evaluate{A/B}
 
-simplifyinner A*(B*c) => evaluate{A*B}*c
-
 simplifyinner (x^A)*(x^B) => x^(A+B)
 simplifyinner (A*b)+(C*b) => evaluate{A+C}*b
 simplifyinner 1/x => x^(-1)
@@ -50,13 +45,20 @@ simplifyinner 1/(x^A) => x^(0-A)
 
 simplifyinner (Aa+Bb)*Cc => (Aa*Cc)+(Bb*Cc)
 
-simplifyinner (Aa*b)*(b^(-1)) => Aa
+simplifyinner b*(b^(-1)) => 1
 
 simplifyinner a^Bb => a^simplifyinner[Bb]
 simplifyinner Aa+Bb => simplifyinner[Aa]+simplifyinner[Bb]
 simplifyinner Aa-Bb => simplifyinner[Aa]-simplifyinner[Bb]
 simplifyinner Aa*Bb => simplifyinner[Aa]*simplifyinner[Bb]
 simplifyinner Aa/Bb => simplifyinner[Aa]/simplifyinner[Bb]
+
+simplifyinner BB*A => A*BB
+
+simplifyinner::pre (Aa*Bb)*Cc => (Cc*Aa)*Bb
+simplifyinner::pre Aa*(Bb*Cc) => Cc*(Aa*Bb)
+simplifyinner::pre Aa*Bb => Bb*Aa
+simplifyinner::pre Aa+Bb => Bb+Aa
 
 simplifyinner (Aa) => Aa
 simplifyinner (Aa..) => (simplifyinner[Aa..])

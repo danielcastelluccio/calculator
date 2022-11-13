@@ -217,9 +217,10 @@ def apply_internals(expression, rules):
 
 def apply(expression, rules, command_in):
     command = expression[0]
-    valid = True
 
     expression = apply_internals(expression, rules)
+
+    applied_amount = 0
 
     if command in rules:
         expression_new = []
@@ -249,8 +250,9 @@ def apply(expression, rules, command_in):
                 temp_expression = temp_expression[0:-1]
 
                 i = 0
-                while i < count and valid:
-                    valid, temp_expression = apply(temp_expression, rules, command)
+                while i < count:
+                    amount, temp_expression = apply(temp_expression, rules, command)
+                    applied_amount += amount
 
                     if temp_expression:
                         temp_expression = apply_internals(temp_expression, rules)
@@ -264,131 +266,173 @@ def apply(expression, rules, command_in):
         expression = expression_new
 
     if command_in and command_in in rules:
-        return apply_rule(expression, rules, command_in)
+        amount, applied = apply_rule(expression, rules, command_in)
+        return amount + applied_amount, applied
 
-    return valid, expression
+    return max(applied_amount, 1), expression
 
-def apply_rule(expression, rules, rule_type):
-    for rule in rules[rule_type]:
-        rule_input = rule[0]
-        expression_index = 0
+def apply_rule_specific(expression, rules, rule, rule_index):
+    if not rule[0]:
+        return False, None
 
-        bindings = {}
+    rule_input = rule[0]
+    expression_index = 0
 
-        rule_invalid = False
+    bindings = {}
 
-        for input in rule_input:
-            if expression_index >= len(expression):
+    rule_invalid = False
+
+    for input in rule_input:
+        if expression_index >= len(expression):
+            rule_invalid = True
+            break
+
+        if is_symbol(input):
+            if expression[expression_index] == input:
+                expression_index += 1
+            else:
+                rule_invalid = True
+                break
+        elif input in mathematical_functions:
+            if expression[expression_index] == input:
+                expression_index += 1
+            else:
+                rule_invalid = True
+                break
+        elif is_str_number(input):
+            if expression[expression_index] == input:
+                expression_index += 1
+            else:
+                rule_invalid = True
+                break
+        else:
+            binding, expression_index = get_binding(expression, expression_index, input.endswith(".."))
+
+            type = None
+
+            if len(binding) == 1:
+                if binding[0][0] == '-':
+                    type = RuleType.INVALID
+                else:
+                    if is_str_number(binding[0]) or binding[0] == "e":
+                        type = RuleType.INDIVIDUAL_CONSTANT
+                    else:
+                        type = RuleType.INDIVIDUAL_VARIABLE
+            else:
+                is_constant = True
+                for token in binding:
+                    if not is_str_number(token) and not token == "(" and not token == ")" and not is_symbol(token):
+                        is_constant = False
+                
+                if is_constant:
+                    type = RuleType.MULTIPLE_CONSTANT
+                else:
+                    type = RuleType.MULTIPLE_VARIABLE
+
+            if input.isupper() and (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
+                rule_invalid = True
+                break
+            elif input.isupper() and len(input) == 1 and not type == RuleType.INDIVIDUAL_CONSTANT:
+                rule_invalid = True
+                break
+            elif input.islower() and not (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
+                rule_invalid = True
+                break
+            elif input.islower() and len(input) == 1 and type == RuleType.MULTIPLE_VARIABLE:
+                rule_invalid = True
+                break
+            elif type == RuleType.INVALID:
                 rule_invalid = True
                 break
 
-            if is_symbol(input):
-                if expression[expression_index] == input:
-                    expression_index += 1
-                else:
-                    rule_invalid = True
-                    break
-            elif input in mathematical_functions:
-                if expression[expression_index] == input:
-                    expression_index += 1
-                else:
-                    rule_invalid = True
-                    break
-            elif is_str_number(input):
-                if expression[expression_index] == input:
-                    expression_index += 1
-                else:
-                    rule_invalid = True
-                    break
-            else:
-                binding, expression_index = get_binding(expression, expression_index, input.endswith(".."))
+            if input in bindings and not bindings[input] == binding:
+                rule_invalid = True
+                break
+                
+            bindings[input] = binding
 
-                type = None
+    if not rule_invalid and expression_index == len(expression):
+        applied_amount = 0
 
-                if len(binding) == 1:
-                    if binding[0][0] == '-':
-                        type = RuleType.INVALID
-                    else:
-                        if is_str_number(binding[0]) or binding[0] == "e":
-                            type = RuleType.INDIVIDUAL_CONSTANT
-                        else:
-                            type = RuleType.INDIVIDUAL_VARIABLE
-                else:
-                    is_constant = True
-                    for token in binding:
-                        if not is_str_number(token) and not token == "(" and not token == ")" and not is_symbol(token):
-                            is_constant = False
-                    
-                    if is_constant:
-                        type = RuleType.MULTIPLE_CONSTANT
-                    else:
-                        type = RuleType.MULTIPLE_VARIABLE
+        rule_output = rule[1]
+        applied_bindings = apply_bindings(rule_output, bindings)
+        applied_bindings_new = []
 
-                if input.isupper() and (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
-                    rule_invalid = True
-                    break
-                elif input.isupper() and len(input) == 1 and not type == RuleType.INDIVIDUAL_CONSTANT:
-                    rule_invalid = True
-                    break
-                elif input.islower() and not (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
-                    rule_invalid = True
-                    break
-                elif input.islower() and len(input) == 1 and type == RuleType.MULTIPLE_VARIABLE:
-                    rule_invalid = True
-                    break
-                elif type == RuleType.INVALID:
-                    rule_invalid = True
-                    break
+        index = 0
+        while index < len(applied_bindings):
+            if applied_bindings[index] in rules:
+                cached_expression = []
 
-                if input in bindings and not bindings[input] == binding:
-                    rule_invalid = True
-                    break
-                    
-                bindings[input] = binding
+                cached_expression.append(applied_bindings[index])
+                cached_expression.append(applied_bindings[index + 1])
 
-        if not rule_invalid and expression_index == len(expression):
-            rule_output = rule[1]
-            applied_bindings = apply_bindings(rule_output, bindings)
-            applied_bindings_new = []
-
-            index = 0
-            while index < len(applied_bindings):
-                if applied_bindings[index] in rules:
-                    cached_expression = []
-
-                    cached_expression.append(applied_bindings[index])
-                    cached_expression.append(applied_bindings[index + 1])
-
-                    if applied_bindings[index + 1] == "^":
-                        cached_expression.append(applied_bindings[index + 2])
-                        cached_expression.append(applied_bindings[index + 3])
-                        index += 2
-
+                if applied_bindings[index + 1] == "^":
+                    cached_expression.append(applied_bindings[index + 2])
+                    cached_expression.append(applied_bindings[index + 3])
                     index += 2
 
-                    inside_parenthesis = 1
-                    while inside_parenthesis > 0:
-                        if applied_bindings[index] == "[":
-                            inside_parenthesis += 1
-                        elif applied_bindings[index] == "]":
-                            inside_parenthesis -= 1
+                index += 2
 
-                        cached_expression.append(applied_bindings[index])
+                inside_parenthesis = 1
+                while inside_parenthesis > 0:
+                    if applied_bindings[index] == "[":
+                        inside_parenthesis += 1
+                    elif applied_bindings[index] == "]":
+                        inside_parenthesis -= 1
 
-                        index += 1
+                    cached_expression.append(applied_bindings[index])
 
-                    applied, applied_result = apply(cached_expression, rules, None)
-                    if applied and applied_result:
-                        applied_bindings_new.extend(applied_result)
-                    else:
-                        return False, None
-                else:
-                    applied_bindings_new.append(applied_bindings[index])
                     index += 1
 
-            return True, applied_bindings_new
+                amount, applied_result = apply(cached_expression, rules, None)
+                if amount and applied_result:
+                    applied_bindings_new.extend(applied_result)
+                    applied_amount += amount
+                else:
+                    return 0, None
+            else:
+                applied_bindings_new.append(applied_bindings[index])
+                index += 1
 
-    return False, None
+        return max_rule_amount - rule_index + applied_amount / 1000.0, applied_bindings_new
+
+    return 0, None
+
+max_rule_amount = 999
+
+def apply_rule(expression, rules, rule_type):
+    adjust_rules = [([], [])]
+    if rule_type + "::pre" in rules:
+        adjust_rules.extend(rules[rule_type + "::pre"])
+    
+    possible_rule_amount = 0
+    possible_rule = None
+
+    for adjust_rule in adjust_rules:
+        original_expression = expression
+        first_run = True
+
+        while not original_expression == expression or first_run:
+            first_run = False
+        
+            applied_index, applied_adjust = apply_rule_specific(expression, rules, adjust_rule, 0)
+            if applied_index:
+                expression = applied_adjust
+            elif adjust_rule[0]:
+                break
+
+            for index, rule in enumerate(rules[rule_type]):
+                applied_amount, applied_result = apply_rule_specific(expression, rules, rule, index)
+
+                if applied_amount:
+                    if applied_amount > possible_rule_amount:
+                        possible_rule_amount = applied_amount
+                        possible_rule = applied_result
+
+    if possible_rule:
+        return possible_rule_amount, possible_rule
+
+    return 0, None
 
 def apply_math_operation(operation, first, second):
     match operation:
