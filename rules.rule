@@ -1,7 +1,6 @@
 derivative Aa+Bb => derivative[Aa]+derivative[Bb]
 derivative Aa-Bb => derivative[Aa]-derivative[Bb]
 derivative (Aa..) => (derivative[Aa..])
-derivative A*(b^C) => (A*C)*(b^(C-1))
 derivative a^BB => BB*(a^(BB-1))
 derivative A*b => A
 derivative b => 1
@@ -15,6 +14,7 @@ antiderivative a => (1/2)*(a^2)
 antiderivative A*(b^C) => ((1/(C+1))*(A))*(b^(C+1))
 
 simplifyinner A => A
+simplifyinner a => a
 simplifyinner A*b => A*b
 simplifyinner Aa+0 => Aa
 simplifyinner 0*Aa => 0
@@ -29,6 +29,8 @@ simplifyinner a^1 => a
 simplifyinner a^Bb => a^simplifyinner[Bb]
 simplifyinner Aa*0 => 0
 simplifyinner 1/1 => 1
+simplifyinner 1/x => x^(-1)
+simplifyinner (x^A)*(x^B) => x^(A+B)
 simplifyinner Aa*1 => Aa
 simplifyinner A*(B*c) => evaluate{A*B}*c
 simplifyinner Aa+Bb => simplifyinner[Aa]+simplifyinner[Bb]
@@ -37,8 +39,7 @@ simplifyinner Aa*Bb => simplifyinner[Aa]*simplifyinner[Bb]
 simplifyinner Aa/Bb => simplifyinner[Aa]/simplifyinner[Bb]
 simplifyinner log_e[e] => 1
 simplifyinner (Aa..) => (simplifyinner[Aa..])
-simplifyinner Aa => Aa
-simplifyinner Aa.. => Aa..
+simplifyinner log_A[b] => log_A[b]
 
 simplify (Aa..) => simplify[Aa..]
 simplify Aa.. => simplifyinner[Aa..]

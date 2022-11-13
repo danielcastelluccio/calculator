@@ -163,7 +163,7 @@ def get_int_from_str(string):
     else:
         return int(string)
 
-def apply_internals(expression):
+def apply_internals(expression, rules):
     new_expression = []
     index = 0
     while index < len(expression):
@@ -178,6 +178,37 @@ def apply_internals(expression):
             new_expression.append(result)
 
             index += 6
+        elif expression[index] == "complete":
+            index += 2
+            inside_brackets = 1
+            temp_expression = []
+
+            command = expression[index]
+            index += 2
+
+            while inside_brackets > 0:
+                if expression[index] == "[":
+                    inside_brackets += 1
+                elif expression[index] == "]":
+                    inside_brackets -= 1
+
+                if inside_brackets > 0:
+                    temp_expression.append(expression[index])
+
+                index += 1
+
+            index += 2
+
+            temp_expression_cached = []
+            while True:
+                _, temp_expression = apply(temp_expression, rules, command)
+
+                if temp_expression_cached == temp_expression:
+                    break
+
+                temp_expression_cached = temp_expression
+
+            new_expression.extend(temp_expression)
         else:
             new_expression.append(expression[index])
             index += 1
@@ -187,6 +218,9 @@ def apply_internals(expression):
 def apply(expression, rules, command_in):
     command = expression[0]
     valid = True
+
+    expression = apply_internals(expression, rules)
+
     if command in rules:
         expression_new = []
         index = 0
@@ -219,7 +253,7 @@ def apply(expression, rules, command_in):
                     valid, temp_expression = apply(temp_expression, rules, command)
 
                     if temp_expression:
-                        temp_expression = apply_internals(temp_expression)
+                        temp_expression = apply_internals(temp_expression, rules)
                     i += 1
 
                 expression_new.extend(temp_expression)
@@ -279,8 +313,6 @@ def apply_rule(expression, rules, rule_type):
                             type = RuleType.INDIVIDUAL_CONSTANT
                         else:
                             type = RuleType.INDIVIDUAL_VARIABLE
-                elif len(binding) == 3 and binding[1].startswith("-"):
-                    type = RuleType.INDIVIDUAL_CONSTANT
                 else:
                     is_constant = True
                     for token in binding:
