@@ -1,4 +1,12 @@
 import sys
+from enum import Enum
+
+class RuleType(Enum):
+    INDIVIDUAL_CONSTANT = 0
+    MULTIPLE_CONSTANT = 1
+    INDIVIDUAL_VARIABLE = 2
+    MULTIPLE_VARIABLE = 3
+    INVALID = 4
 
 def is_math_symbol(character):
     return character == '*' \
@@ -26,8 +34,11 @@ def tokenize(expression):
 
     tokens = []
     buffer = ""
-    for character in expression:
-        if is_symbol(character):
+    previous_character = None
+    is_negative = False
+
+    for index, character in enumerate(expression):
+        if is_symbol(character) and (not character == '-' or not previous_character == '(') and (not character == '(' or not expression[index + 1] == '-') and (not character == ')' or not is_negative):
             if buffer:
                 tokens.append(buffer)
             tokens.append(character)
@@ -37,7 +48,13 @@ def tokenize(expression):
                 tokens.append(buffer)
             buffer = ""
         else:
+            if character == '(':
+                is_negative = True
+            elif character == ')':
+                is_negative = False
+
             buffer += character
+        previous_character = character
 
     return tokens
 
@@ -138,17 +155,28 @@ def is_str_int(string):
         return False
 
 def is_str_number(string):
-    return is_str_int(string) or string == "e"
+    return is_str_int(string) or string == "e" or (string[0] == '(' and is_str_int(string[1:-1]))
+
+def get_int_from_str(string):
+    if string[0] == '(':
+        return int(string[1:-1])
+    else:
+        return int(string)
 
 def apply_internals(expression):
     new_expression = []
     index = 0
     while index < len(expression):
         if expression[index] == "evaluate":
-            first = int(expression[2])
-            second = int(expression[4])
+            first = get_int_from_str(expression[2])
+            second = get_int_from_str(expression[4])
             operation = expression[3]
-            new_expression.append(str(apply_math_operation(operation, first, second)))
+
+            result = str(apply_math_operation(operation, first, second))
+            if result.startswith("-"):
+                result = "(" + result + ")"
+            new_expression.append(result)
+
             index += 6
         else:
             new_expression.append(expression[index])
@@ -240,18 +268,43 @@ def apply_rule(expression, rules, rule_type):
                     break
             else:
                 binding, expression_index = get_binding(expression, expression_index, input.endswith(".."))
-                is_constant = True
-                for token in binding:
-                    if not is_str_number(token) and not token == "(" and not token == ")" and not is_symbol(token):
-                        is_constant = False
 
-                if input.isupper() and not is_constant:
+                type = None
+
+                if len(binding) == 1:
+                    if binding[0][0] == '-':
+                        type = RuleType.INVALID
+                    else:
+                        if is_str_number(binding[0]):
+                            type = RuleType.INDIVIDUAL_CONSTANT
+                        else:
+                            type = RuleType.INDIVIDUAL_VARIABLE
+                elif len(binding) == 3 and binding[1].startswith("-"):
+                    type = RuleType.INDIVIDUAL_CONSTANT
+                else:
+                    is_constant = True
+                    for token in binding:
+                        if not is_str_number(token) and not token == "(" and not token == ")" and not is_symbol(token):
+                            is_constant = False
+                    
+                    if is_constant:
+                        type = RuleType.MULTIPLE_CONSTANT
+                    else:
+                        type = RuleType.MULTIPLE_VARIABLE
+
+                if input.isupper() and (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
                     rule_invalid = True
                     break
-                elif input.isupper() and len(input) == 1 and not len(binding) == 1:
+                elif input.isupper() and len(input) == 1 and not type == RuleType.INDIVIDUAL_CONSTANT:
                     rule_invalid = True
                     break
-                elif input.islower() and not (len(binding) == 1 and not is_str_number(binding[0])):
+                elif input.islower() and not (type == RuleType.INDIVIDUAL_VARIABLE or type == RuleType.MULTIPLE_VARIABLE):
+                    rule_invalid = True
+                    break
+                elif input.islower() and len(input) == 1 and type == RuleType.MULTIPLE_VARIABLE:
+                    rule_invalid = True
+                    break
+                elif type == RuleType.INVALID:
                     rule_invalid = True
                     break
 
